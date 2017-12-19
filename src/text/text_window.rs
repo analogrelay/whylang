@@ -3,14 +3,14 @@ use std::io::Read;
 
 use utils;
 
-use text::TextSpan;
+use text::{TextSpan, Error};
 
 /// Represents a sliding window of text.
 pub struct TextWindow<'a> {
     buf: &'a str,
     offset: usize,
     end: usize,
-    last_char_start: usize,
+    last: Option<char>,
 }
 
 impl<'a> TextWindow<'a> {
@@ -19,7 +19,7 @@ impl<'a> TextWindow<'a> {
             buf,
             offset: 0,
             end: 0,
-            last_char_start: 0,
+            last: None,
         }
     }
 
@@ -35,13 +35,7 @@ impl<'a> TextWindow<'a> {
     /// 
     /// This is useful as it is usually the char callers are most interested in.
     pub fn last(&self) -> Option<char> {
-        if self.last_char_start == self.end {
-            None
-        } else if let Some((c, _)) = utils::decode_utf8_character(&self.buf.as_bytes()[self.last_char_start..self.end]) {
-            Some(c)
-        } else {
-            None
-        }
+        self.last
     }
 
     pub fn span(&self) -> TextSpan {
@@ -62,9 +56,10 @@ impl<'a> TextWindow<'a> {
     /// ## Returns
     /// `true` if a character is successfully read in.
     /// `false` if end-of-file has been reached.
-    pub fn next(&mut self) -> bool {
+    pub fn next(&mut self) -> Result<bool, Error> {
         if self.end >= self.buf.len() {
-            false
+            self.last = None;
+            Ok(false)
         } else {
             // See how many bytes are needed to load the character pointed to by `end`
             let width = utils::utf8_char_width(self.buf.as_bytes()[self.end]);
@@ -72,9 +67,14 @@ impl<'a> TextWindow<'a> {
             // Advance that number of bytes
             let new_end = self.end + width;
 
-            self.last_char_start = self.end;
-            self.end = new_end;
-            true
+            if let Some((c, _)) = utils::decode_utf8_character(&self.buf.as_bytes()[self.end..new_end]) {
+                self.last = Some(c);
+                self.end = new_end;
+                Ok(true)
+            } else {
+                // TODO: Use Result?
+                Err(Error::InvalidText)
+            }
         }
     }
 
@@ -96,7 +96,7 @@ impl<'a> TextWindow<'a> {
     /// to `next`
     pub fn advance(&mut self) {
         self.offset = self.end;
-        self.last_char_start = self.end;
+        self.last = None;
     }
 }
 
@@ -122,7 +122,7 @@ mod tests {
     #[test]
     pub fn next_loads_next_character_into_buffer() {
         let mut window = TextWindow::new("testwin");
-        assert!(window.next());
+        assert!(window.next().unwrap());
         assert_eq!("t", window.as_str());
     }
 
@@ -130,25 +130,25 @@ mod tests {
     pub fn next_returns_false_when_at_end_of_file() {
         let mut window = TextWindow::new("testwin");
         for _ in 0..7 {
-            assert!(window.next());
+            assert!(window.next().unwrap());
         }
-        assert!(!window.next());
+        assert!(!window.next().unwrap());
         assert_eq!("testwin", window.as_str());
     }
 
     #[test]
     pub fn backtrack_moves_end_pointer_back_to_provided_value() {
         let mut window = TextWindow::new("testwin");
-        assert!(window.next());
-        assert!(window.next());
-        assert!(window.next());
-        assert!(window.next());
+        assert!(window.next().unwrap());
+        assert!(window.next().unwrap());
+        assert!(window.next().unwrap());
+        assert!(window.next().unwrap());
         assert_eq!("test", window.as_str());
         assert_eq!(b"test", window.as_bytes());
         let marker = window.end();
-        assert!(window.next());
-        assert!(window.next());
-        assert!(window.next());
+        assert!(window.next().unwrap());
+        assert!(window.next().unwrap());
+        assert!(window.next().unwrap());
         assert_eq!("testwin", window.as_str());
         window.backtrack(marker);
         assert_eq!("test", window.as_str());
@@ -157,17 +157,17 @@ mod tests {
     #[test]
     pub fn advance_moves_offset_up_to_end_pointer() {
         let mut window = TextWindow::new("testwin");
-        assert!(window.next());
-        assert!(window.next());
-        assert!(window.next());
-        assert!(window.next());
+        assert!(window.next().unwrap());
+        assert!(window.next().unwrap());
+        assert!(window.next().unwrap());
+        assert!(window.next().unwrap());
         assert_eq!("test", window.as_str());
         window.advance();
         assert_eq!("", window.as_str());
         assert_eq!(None, window.last());
-        assert!(window.next());
-        assert!(window.next());
-        assert!(window.next());
+        assert!(window.next().unwrap());
+        assert!(window.next().unwrap());
+        assert!(window.next().unwrap());
         assert_eq!("win", window.as_str());
     }
 
@@ -184,7 +184,7 @@ mod tests {
     }
 
     fn move_next_and_check(window: &mut TextWindow, expected_str: &'static str, expected_last: char, expected_index: usize) {
-        assert!(window.next());
+        assert!(window.next().unwrap());
         assert_eq!(expected_str, window.as_str());
         assert_eq!(Some(expected_last), window.last());
         assert_eq!(expected_index, window.end);

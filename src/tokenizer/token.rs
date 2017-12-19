@@ -1,14 +1,18 @@
 use text::TextSpan;
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum TokenType {
     Unknown,
+    Number,
 }
 
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum TokenValue {
     None,
+    Integer(i64),
 }
 
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Token {
     span: TextSpan,
     typ: TokenType,
