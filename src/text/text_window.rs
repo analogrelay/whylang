@@ -1,11 +1,16 @@
-use text::Error;
+use std::char;
+use std::io::Read;
+
 use utils;
+
+use text::TextSpan;
 
 /// Represents a sliding window of text.
 pub struct TextWindow<'a> {
     buf: &'a str,
     offset: usize,
     end: usize,
+    last_char_start: usize,
 }
 
 impl<'a> TextWindow<'a> {
@@ -14,6 +19,7 @@ impl<'a> TextWindow<'a> {
             buf,
             offset: 0,
             end: 0,
+            last_char_start: 0,
         }
     }
 
@@ -25,9 +31,30 @@ impl<'a> TextWindow<'a> {
         self.end
     }
 
+    /// Gets the last item in the window as a `char`
+    /// 
+    /// This is useful as it is usually the char callers are most interested in.
+    pub fn last(&self) -> Option<char> {
+        if self.last_char_start == self.end {
+            None
+        } else if let Some((c, _)) = utils::decode_utf8_character(&self.buf.as_bytes()[self.last_char_start..self.end]) {
+            Some(c)
+        } else {
+            None
+        }
+    }
+
+    pub fn span(&self) -> TextSpan {
+        TextSpan::new(self.offset, self.end)
+    }
+
     /// Gets a `str` that represents the current content of the window
     pub fn as_str(&self) -> &str {
         &self.buf[self.offset..self.end]
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.buf.as_bytes()[self.offset..self.end]
     }
 
     /// Load another character into the buffer
@@ -45,6 +72,7 @@ impl<'a> TextWindow<'a> {
             // Advance that number of bytes
             let new_end = self.end + width;
 
+            self.last_char_start = self.end;
             self.end = new_end;
             true
         }
@@ -58,9 +86,17 @@ impl<'a> TextWindow<'a> {
     pub fn backtrack(&mut self, new_end: usize) {
         assert!(
             self.buf.is_char_boundary(new_end),
-            "The requested index does not represent a character boundary."
-        );
+            "The requested index does not represent a character boundary.");
         self.end = new_end;
+    }
+
+    /// Advances the window to the point currently pointed to by `end`
+    /// 
+    /// After this call, `.as_str()` will return an empty string until the next call
+    /// to `next`
+    pub fn advance(&mut self) {
+        self.offset = self.end;
+        self.last_char_start = self.end;
     }
 }
 
@@ -70,44 +106,87 @@ mod tests {
 
     #[test]
     pub fn as_str_returns_empty_string_when_window_initialized() {
-        assert_eq!("", create_window().as_str());
+        assert_eq!("", TextWindow::new("testwin").as_str());
+    }
+
+    #[test]
+    pub fn as_bytes_returns_empty_string_when_window_initialized() {
+        assert_eq!(b"", TextWindow::new("testwin").as_bytes());
+    }
+
+    #[test]
+    pub fn last_returns_none_when_window_initialized() {
+        assert_eq!(None, TextWindow::new("testwin").last());
     }
 
     #[test]
     pub fn next_loads_next_character_into_buffer() {
-        let mut window = create_window();
+        let mut window = TextWindow::new("testwin");
         assert!(window.next());
         assert_eq!("t", window.as_str());
     }
 
     #[test]
     pub fn next_returns_false_when_at_end_of_file() {
-        let mut window = create_window();
-        for _ in 0..22 {
+        let mut window = TextWindow::new("testwin");
+        for _ in 0..7 {
             assert!(window.next());
         }
         assert!(!window.next());
-        assert_eq!("this is a test window!", window.as_str());
+        assert_eq!("testwin", window.as_str());
     }
 
     #[test]
     pub fn backtrack_moves_end_pointer_back_to_provided_value() {
-        let mut window = create_window();
+        let mut window = TextWindow::new("testwin");
         assert!(window.next());
         assert!(window.next());
         assert!(window.next());
         assert!(window.next());
-        assert_eq!("this", window.as_str());
+        assert_eq!("test", window.as_str());
+        assert_eq!(b"test", window.as_bytes());
         let marker = window.end();
         assert!(window.next());
         assert!(window.next());
         assert!(window.next());
-        assert_eq!("this is", window.as_str());
+        assert_eq!("testwin", window.as_str());
         window.backtrack(marker);
-        assert_eq!("this", window.as_str());
+        assert_eq!("test", window.as_str());
     }
 
-    fn create_window() -> TextWindow<'static> {
-        TextWindow::new("this is a test window!")
+    #[test]
+    pub fn advance_moves_offset_up_to_end_pointer() {
+        let mut window = TextWindow::new("testwin");
+        assert!(window.next());
+        assert!(window.next());
+        assert!(window.next());
+        assert!(window.next());
+        assert_eq!("test", window.as_str());
+        window.advance();
+        assert_eq!("", window.as_str());
+        assert_eq!(None, window.last());
+        assert!(window.next());
+        assert!(window.next());
+        assert!(window.next());
+        assert_eq!("win", window.as_str());
+    }
+
+    #[test]
+    pub fn next_moves_in_character_increments() {
+        let mut window = TextWindow::new("a¶Ё₵𐆓e\u{0301}");
+        move_next_and_check(&mut window, "a", 'a', 1);
+        move_next_and_check(&mut window, "a¶", '¶', 3);
+        move_next_and_check(&mut window, "a¶Ё", 'Ё', 5);
+        move_next_and_check(&mut window, "a¶Ё₵", '₵', 8);
+        move_next_and_check(&mut window, "a¶Ё₵𐆓", '𐆓', 12);
+        move_next_and_check(&mut window, "a¶Ё₵𐆓e", 'e', 13);
+        move_next_and_check(&mut window, "a¶Ё₵𐆓e\u{0301}", '\u{0301}', 15);
+    }
+
+    fn move_next_and_check(window: &mut TextWindow, expected_str: &'static str, expected_last: char, expected_index: usize) {
+        assert!(window.next());
+        assert_eq!(expected_str, window.as_str());
+        assert_eq!(Some(expected_last), window.last());
+        assert_eq!(expected_index, window.end);
     }
 }
