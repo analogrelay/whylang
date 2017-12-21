@@ -1,4 +1,5 @@
 use std::char;
+use std::ops::{Range, RangeFrom, RangeFull, RangeTo, RangeInclusive, RangeToInclusive};
 
 use utils;
 
@@ -55,7 +56,7 @@ impl<'a> TextWindow<'a> {
     /// ## Returns
     /// `true` if a character is successfully read in.
     /// `false` if end-of-file has been reached.
-    pub fn next(&mut self) -> Result<bool, Error> {
+    pub fn take(&mut self) -> Result<bool, Error> {
         if self.end >= self.buf.len() {
             self.last = None;
             Ok(false)
@@ -71,10 +72,16 @@ impl<'a> TextWindow<'a> {
                 self.end = new_end;
                 Ok(true)
             } else {
-                // TODO: Use Result?
                 Err(Error::InvalidText)
             }
         }
+    }
+
+    /// Resets the window back to the very beginning of the string.
+    pub fn reset(&mut self) {
+        self.offset = 0;
+        self.end = 0;
+        self.last = None;
     }
 
     /// Reset the end point of the window to the provided offset
@@ -87,6 +94,17 @@ impl<'a> TextWindow<'a> {
             self.buf.is_char_boundary(new_end),
             "The requested index does not represent a character boundary.");
         self.end = new_end;
+
+        // Scan back to the previous char boundary
+        let mut pos = self.end - 1;
+        while !self.buf.is_char_boundary(pos) {
+            pos -= 1;
+        }
+
+        // Update last to that character
+        let (c, _) = utils::decode_utf8_character(&self.buf.as_bytes()[pos..self.end])
+            .expect("The previous character should have been a valid UTF-8 character.");
+        self.last = Some(c);
     }
 
     /// Advances the window to the point currently pointed to by `end`
@@ -97,11 +115,116 @@ impl<'a> TextWindow<'a> {
         self.offset = self.end;
         self.last = None;
     }
+
+    // Utilities for the tokenizer
+    pub fn last_is<P: CharPredicate>(&self, mut predicate: P) -> bool {
+        match self.last() {
+            Some(c) => predicate.test(c),
+            None => false,
+        }
+    }
+
+    /// Scans until a character that matches the predicate is found
+    /// 
+    /// The window is expanded such that it contains all the matching characters
+    /// but NO further characters.
+    pub fn scan_while<P: CharPredicate>(&mut self, mut predicate: P) -> Result<(), Error> {
+        let mut marker = self.end();
+        while self.take()? && predicate.test(self.last().unwrap()) {
+            marker = self.end();
+        }
+        self.backtrack(marker);
+        Ok(())
+    }
+
+    /// The same as `scan_until` but inverts the predicate, such that the scan concludes when it returns `false`
+    pub fn scan_until<P: CharPredicate>(&mut self, predicate: P) -> Result<(), Error> {
+        self.scan_while(predicate.invert())
+    }
+}
+
+pub trait CharPredicate: Sized {
+    fn test(&mut self, c: char) -> bool;
+
+    fn invert(self) -> InvertedCharScanPredicate<Self> {
+        InvertedCharScanPredicate(self)
+    }
+}
+
+impl<F: FnMut(char) -> bool> CharPredicate for F {
+    fn test(&mut self, c: char) -> bool {
+        self.call_mut((c,))
+    }
+}
+
+impl CharPredicate for Range<char> {
+    fn test(&mut self, c: char) -> bool {
+        self.contains(c)
+    }
+}
+
+impl CharPredicate for RangeFull {
+    fn test(&mut self, _c: char) -> bool {
+        true
+    }
+}
+
+impl CharPredicate for RangeFrom<char> {
+    fn test(&mut self, c: char) -> bool {
+        self.contains(c)
+    }
+}
+
+impl CharPredicate for RangeTo<char> {
+    fn test(&mut self, c: char) -> bool {
+        self.contains(c)
+    }
+}
+
+impl CharPredicate for RangeToInclusive<char> {
+    fn test(&mut self, c: char) -> bool {
+        self.contains(c)
+    }
+}
+
+impl CharPredicate for RangeInclusive<char> {
+    fn test(&mut self, c: char) -> bool {
+        self.contains(c)
+    }
+}
+
+impl CharPredicate for char {
+    fn test(&mut self, c: char) -> bool {
+        c == *self
+    }
+}
+
+pub struct InvertedCharScanPredicate<P: CharPredicate>(P);
+
+impl<P: CharPredicate> CharPredicate for InvertedCharScanPredicate<P> {
+    fn test(&mut self, c: char) -> bool {
+        !self.0.test(c)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use text::TextWindow;
+
+    macro_rules! assert_window {
+        ($win: expr, $content: expr, $last: expr, $end: expr) => {
+            assert_eq!($content, $win.as_str());
+            assert_eq!(Some($last), $win.last());
+            assert_eq!($end, $win.end());
+        };
+    }
+
+    macro_rules! take_and_assert_window {
+        ($win: expr, $content: expr, $last: expr, $end: expr) => {
+            assert!($win.take().unwrap());
+            assert_window!($win, $content, $last, $end)
+        };
+    }
 
     #[test]
     pub fn as_str_returns_empty_string_when_window_initialized() {
@@ -119,35 +242,35 @@ mod tests {
     }
 
     #[test]
-    pub fn next_loads_next_character_into_buffer() {
+    pub fn take_loads_take_character_into_buffer() {
         let mut window = TextWindow::new("testwin");
-        assert!(window.next().unwrap());
+        assert!(window.take().unwrap());
         assert_eq!("t", window.as_str());
     }
 
     #[test]
-    pub fn next_returns_false_when_at_end_of_file() {
+    pub fn take_returns_false_when_at_end_of_file() {
         let mut window = TextWindow::new("testwin");
         for _ in 0..7 {
-            assert!(window.next().unwrap());
+            assert!(window.take().unwrap());
         }
-        assert!(!window.next().unwrap());
+        assert!(!window.take().unwrap());
         assert_eq!("testwin", window.as_str());
     }
 
     #[test]
     pub fn backtrack_moves_end_pointer_back_to_provided_value() {
         let mut window = TextWindow::new("testwin");
-        assert!(window.next().unwrap());
-        assert!(window.next().unwrap());
-        assert!(window.next().unwrap());
-        assert!(window.next().unwrap());
+        assert!(window.take().unwrap());
+        assert!(window.take().unwrap());
+        assert!(window.take().unwrap());
+        assert!(window.take().unwrap());
         assert_eq!("test", window.as_str());
         assert_eq!(b"test", window.as_bytes());
         let marker = window.end();
-        assert!(window.next().unwrap());
-        assert!(window.next().unwrap());
-        assert!(window.next().unwrap());
+        assert!(window.take().unwrap());
+        assert!(window.take().unwrap());
+        assert!(window.take().unwrap());
         assert_eq!("testwin", window.as_str());
         window.backtrack(marker);
         assert_eq!("test", window.as_str());
@@ -156,36 +279,74 @@ mod tests {
     #[test]
     pub fn advance_moves_offset_up_to_end_pointer() {
         let mut window = TextWindow::new("testwin");
-        assert!(window.next().unwrap());
-        assert!(window.next().unwrap());
-        assert!(window.next().unwrap());
-        assert!(window.next().unwrap());
+        assert!(window.take().unwrap());
+        assert!(window.take().unwrap());
+        assert!(window.take().unwrap());
+        assert!(window.take().unwrap());
         assert_eq!("test", window.as_str());
         window.advance();
         assert_eq!("", window.as_str());
         assert_eq!(None, window.last());
-        assert!(window.next().unwrap());
-        assert!(window.next().unwrap());
-        assert!(window.next().unwrap());
+        assert!(window.take().unwrap());
+        assert!(window.take().unwrap());
+        assert!(window.take().unwrap());
         assert_eq!("win", window.as_str());
     }
 
     #[test]
-    pub fn next_moves_in_character_increments() {
+    pub fn take_moves_in_character_increments() {
         let mut window = TextWindow::new("a¶Ё₵𐆓e\u{0301}");
-        move_next_and_check(&mut window, "a", 'a', 1);
-        move_next_and_check(&mut window, "a¶", '¶', 3);
-        move_next_and_check(&mut window, "a¶Ё", 'Ё', 5);
-        move_next_and_check(&mut window, "a¶Ё₵", '₵', 8);
-        move_next_and_check(&mut window, "a¶Ё₵𐆓", '𐆓', 12);
-        move_next_and_check(&mut window, "a¶Ё₵𐆓e", 'e', 13);
-        move_next_and_check(&mut window, "a¶Ё₵𐆓e\u{0301}", '\u{0301}', 15);
+        take_and_assert_window!(&mut window, "a", 'a', 1);
+        take_and_assert_window!(&mut window, "a¶", '¶', 3);
+        take_and_assert_window!(&mut window, "a¶Ё", 'Ё', 5);
+        take_and_assert_window!(&mut window, "a¶Ё₵", '₵', 8);
+        take_and_assert_window!(&mut window, "a¶Ё₵𐆓", '𐆓', 12);
+        take_and_assert_window!(&mut window, "a¶Ё₵𐆓e", 'e', 13);
+        take_and_assert_window!(&mut window, "a¶Ё₵𐆓e\u{0301}", '\u{0301}', 15);
     }
 
-    fn move_next_and_check(window: &mut TextWindow, expected_str: &'static str, expected_last: char, expected_index: usize) {
-        assert!(window.next().unwrap());
-        assert_eq!(expected_str, window.as_str());
-        assert_eq!(Some(expected_last), window.last());
-        assert_eq!(expected_index, window.end);
+    #[test]
+    pub fn scan_while_with_range_expands_window_to_all_characters_matching_predicate() {
+        let mut window = TextWindow::new("0123456789/abcdef");
+
+        // Inclusive Range
+        window.scan_while('0'..='9').unwrap();
+        assert_window!(window, "0123456789", '9', 10);
+        window.reset();
+
+        // Exclusive Range
+        window.scan_while('0'..'9').unwrap();
+        assert_window!(window, "012345678", '8', 9);
+        window.reset();
+
+        // Inclusive RangeTo
+        window.scan_while(..='9').unwrap();
+        assert_window!(window, "0123456789/", '/', 11);
+        window.reset();
+
+        // Exclusive RangeTo
+        window.scan_while(..'9').unwrap();
+        assert_window!(window, "012345678", '8', 9);
+        window.reset();
+
+        // RangeFrom ('/' is below '0')
+        window.scan_while('0'..).unwrap();
+        assert_window!(window, "0123456789", '9', 10);
+        window.reset();
+
+        // RangeFull
+        window.scan_while(..).unwrap();
+        assert_window!(window, "0123456789/abcdef", 'f', 17);
+        window.reset();
+
+        // char
+        window.scan_while('0').unwrap();
+        assert_window!(window, "0", '0', 1);
+        window.reset();
+
+        // Fn
+        window.scan_while(|c: char| c.to_digit(10).unwrap() < 9).unwrap();
+        assert_window!(window, "012345678", '8', 9);
+        window.reset();
     }
 }

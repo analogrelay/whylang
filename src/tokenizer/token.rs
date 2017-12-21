@@ -4,15 +4,19 @@ use text::TextSpan;
 pub enum TokenType {
     Unknown,
     Number,
+    Identifier,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+// TODO: Try to make this Copy. I don't want to have to copy all the bytes of the string (which is what Clone does).
+// A symbol table will help.
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TokenValue {
     None,
     Integer(i64),
+    Symbol(String),
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Token {
     span: TextSpan,
     typ: TokenType,

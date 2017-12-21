@@ -32,8 +32,8 @@ impl<I: Iterator<Item=Token>> Parser<I> {
         }
     }
 
-    fn cur(&self) -> Token {
-        self.current.unwrap()
+    fn cur(&self) -> &Token {
+        self.current.as_ref().unwrap()
     }
 
     fn next(&mut self) -> bool {

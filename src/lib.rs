@@ -1,4 +1,4 @@
-#![feature(inclusive_range_syntax, inclusive_range, range_contains)]
+#![feature(inclusive_range_syntax, inclusive_range, range_contains, fn_traits)]
 
 extern crate lazy_init;
 

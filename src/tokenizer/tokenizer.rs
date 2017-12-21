@@ -1,5 +1,3 @@
-use std::ops::RangeInclusive;
-
 use tokenizer::{Token, TokenType, TokenValue, Error};
 use text::TextWindow;
 
@@ -12,10 +10,10 @@ impl<'a> Iterator for Tokenizer<'a> {
 
     fn next(&mut self) -> Option<Result<Token, Error>> {
         // Read the first character
-        match self.imp.take() {
+        match self.imp.win.take() {
             Ok(true) => Some(self.imp.token()),
             Ok(false) => None,
-            Err(e) => Some(Err(e))
+            Err(e) => Some(Err(e.into()))
         }
     }
 }
@@ -29,78 +27,55 @@ impl<'a> Tokenizer<'a> {
 }
 
 struct TokenizerImpl<'a> {
-    window: TextWindow<'a>
+    win: TextWindow<'a>
 }
 
 impl<'a> TokenizerImpl<'a> {
     pub fn new(document: &'a str) -> TokenizerImpl<'a> {
         TokenizerImpl {
-            window: TextWindow::new(document)
+            win: TextWindow::new(document)
         }
     }
 
     fn token(&mut self) -> Result<Token, Error> {
-        match self.last() {
+        match self.win.last().unwrap() {
             '-' | '0'...'9' => self.number(),
+            '_' | 'a'...'z' | 'A'...'Z' => self.identifier(),
             _ => Ok(self.emit(TokenType::Unknown, TokenValue::None))
         }
     }
 
+    fn identifier(&mut self) -> Result<Token, Error> {
+        self.win.scan_while(|c| match c {
+            '_' | 'a'...'z' | 'A'...'Z' | '0'...'9' => true,
+            _ => false
+        })?;
+
+        let ident = self.win.as_str().into();
+        Ok(self.emit(TokenType::Identifier, TokenValue::Symbol(ident)))
+    }
+
     fn number(&mut self) -> Result<Token, Error> {
-        let mut number_end = self.mark();
-        let mut number_value: i64 = 0;
-
-        let multiplicator = if self.last() == '-' {
-            -1
-        } else {
-            // Not a '-' means this is the first digit.
-            number_value = self.last()
-                .to_digit(10)
-                .expect("The caller was supposed to validate that this was a digit!") as i64;
-
-            1
-        };
-
-        // Read until the end of the digits
-        while self.take()? && self.matches('0'..='9') {
-            number_value *= 10;
-            number_value += multiplicator * self.last()
-                .to_digit(10)
-                .expect("The call to 'matches' was supposed to validate that this was a digit!") as i64;
-            number_end = self.mark();
+        if self.win.last_is('-') {
+            self.win.take()?;
         }
-        self.back(number_end);
 
-        Ok(self.emit(TokenType::Number, TokenValue::Integer(number_value)))
-    }
+        // Read all the digits
+        self.win.scan_while('0'..='9')?;
 
-    // Helpers
-    fn last(&self) -> char {
-        self.window.last().expect("The 'last' helper should only be used when it is guaranteed that there is a character available.")
-    }
+        // Parse the number
+        let num: i64 = self.win.as_str().parse()?;
 
-    fn matches(&self, r: RangeInclusive<char>) -> bool {
-        r.contains(self.last())
-    }
-
-    fn back(&mut self, marker: usize) {
-        self.window.backtrack(marker);
-    }
-
-    fn mark(&self) -> usize {
-        self.window.end()
-    }
-
-    fn take(&mut self) -> Result<bool, Error> {
-        Ok(self.window.next()?)
+        Ok(self.emit(TokenType::Number, TokenValue::Integer(num)))
     }
 
     fn emit(&mut self, typ: TokenType, value: TokenValue) -> Token {
-        let span = self.window.span();
-        self.window.advance();
+        let span = self.win.span();
+        self.win.advance();
         Token::new(span, typ, value)
     }
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -131,6 +106,7 @@ mod tests {
         literal_zero => single_token_test!("0", TokenType::Number, TokenValue::Integer(0));
         literal_pos_int => single_token_test!("123", TokenType::Number, TokenValue::Integer(123));
         literal_neg_int => single_token_test!("-123", TokenType::Number, TokenValue::Integer(-123));
+        identifier => single_token_test!("_123foo_bar", TokenType::Identifier, TokenValue::Symbol("_123foo_bar".into()));
     }
 
     fn get_single_token(s: &str) -> Token {
