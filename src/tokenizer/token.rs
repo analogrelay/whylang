@@ -5,6 +5,15 @@ pub enum TokenType {
     Unknown,
     Number,
     Identifier,
+    Keyword,
+    LParen,
+    RParen,
+    Comma,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    Assign,
 }
 
 // TODO: Try to make this Copy. I don't want to have to copy all the bytes of the string (which is what Clone does).
@@ -12,8 +21,15 @@ pub enum TokenType {
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TokenValue {
     None,
-    Integer(i64),
-    Symbol(String),
+    Int(i64),
+    Sym(String),
+    Kwd(Keyword),
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum Keyword {
+    Def,
+    Extern,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]

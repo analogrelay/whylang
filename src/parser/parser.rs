@@ -1,5 +1,5 @@
 use tokenizer::{Token, TokenType, TokenValue};
-use parser::{Expression, Literal};
+use parser::{Expr, BinOp};
 
 pub struct Parser<I: Iterator<Item=Token>> {
     tokens: I,
@@ -14,7 +14,14 @@ impl<I: Iterator<Item=Token>> Parser<I> {
         }
     }
 
-    pub fn expression(&mut self) -> Option<Expression> {
+    pub fn expression(&mut self) -> Option<Expr> {
+        if let Some(primary) = self.primary_expr() {
+        } else {
+            None
+        }
+    }
+
+    pub fn primary(&mut self) -> Option<Expr> {
         if !self.next() {
             None
         } else {
@@ -25,9 +32,9 @@ impl<I: Iterator<Item=Token>> Parser<I> {
         }
     }
 
-    fn literal(&mut self) -> Option<Expression> {
+    fn literal(&mut self) -> Option<Expr> {
         match self.cur().value() {
-            &TokenValue::Integer(i) => Some(Expression::Lit(Literal::Integer(i))),
+            &TokenValue::Int(i) => Some(Expr::constant(i)),
             _ => None
         }
     }
@@ -45,15 +52,47 @@ impl<I: Iterator<Item=Token>> Parser<I> {
 #[cfg(test)]
 mod tests {
     use tokenizer::{Token, TokenType, TokenValue};
-    use parser::{Parser, Expression, Literal};
+    use parser::{Parser, Expr, BinOp};
     use text::TextSpan;
 
-    #[test]
-    pub fn expr_integer_literal() {
-        let tokens = [
-            Token::new(TextSpan::new(0, 0), TokenType::Number, TokenValue::Integer(42))
-        ];
-        let mut parser = Parser::new(tokens.iter().cloned());
-        assert_eq!(Some(Expression::Lit(Literal::Integer(42))), parser.expression());
+    macro_rules! expr_tests {
+        ($(
+            $name: ident: [ $(
+                ($typ: expr, $val: expr)
+            ),* ] => $result: expr;
+         )*) => {
+           $(
+               #[test]
+               pub fn $name() {
+                   let tokens = [
+                       $(
+                           Token::new(TextSpan::new(0, 0), $typ, $val)
+                       ),*
+                   ];
+                   let mut parser = Parser::new(tokens.iter().cloned());
+                   let expr = parser.expression();
+                   assert!(expr.is_some());
+                   assert_eq!($result, expr.unwrap());
+               }
+           )*
+        };
     }
+
+    expr_tests! {
+        expr_int_literal: [ (TokenType::Number, TokenValue::Int(42)) ] => Expr::constant(42);
+        bin_add_literals: [ 
+            (TokenType::Number, TokenValue::Int(40)),
+            (TokenType::Plus, TokenValue::None),
+            (TokenType::Number, TokenValue::Int(2))
+        ] => Expr::binary(Expr::constant(40), Expr::constant(2), BinOp::Add);
+    }
+
+    // #[test]
+    // pub fn expr_integer_literal() {
+    //     let tokens = [
+    //         Token::new(TextSpan::new(0, 0), TokenType::Number, TokenValue::Int(42))
+    //     ];
+    //     let mut parser = Parser::new(tokens.iter().cloned());
+    //     assert_eq!(Some(Expression::Constant(Literal::Int(42))), parser.expression());
+    // }
 }

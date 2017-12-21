@@ -1,4 +1,4 @@
-use tokenizer::{Token, TokenType, TokenValue, Error};
+use tokenizer::{Token, TokenType, TokenValue, Keyword, Error};
 use text::TextWindow;
 
 pub struct Tokenizer<'a> {
@@ -39,9 +39,22 @@ impl<'a> TokenizerImpl<'a> {
 
     fn token(&mut self) -> Result<Token, Error> {
         match self.win.last().unwrap() {
-            '-' | '0'...'9' => self.number(),
+            '-' if self.win.peek('0'..='9') => self.number(),
+            '0'...'9' => self.number(),
             '_' | 'a'...'z' | 'A'...'Z' => self.identifier(),
-            _ => Ok(self.emit(TokenType::Unknown, TokenValue::None))
+
+            // Simple operators
+            '(' => self.emit(TokenType::LParen, TokenValue::None),
+            ')' => self.emit(TokenType::RParen, TokenValue::None),
+            ',' => self.emit(TokenType::Comma, TokenValue::None),
+            '+' => self.emit(TokenType::Plus, TokenValue::None),
+            '-' => self.emit(TokenType::Minus, TokenValue::None),
+            '*' => self.emit(TokenType::Star, TokenValue::None),
+            '/' => self.emit(TokenType::Slash, TokenValue::None),
+            '=' => self.emit(TokenType::Assign, TokenValue::None),
+
+            // Unexpected things.
+            _ => self.emit(TokenType::Unknown, TokenValue::None)
         }
     }
 
@@ -51,8 +64,12 @@ impl<'a> TokenizerImpl<'a> {
             _ => false
         })?;
 
-        let ident = self.win.as_str().into();
-        Ok(self.emit(TokenType::Identifier, TokenValue::Symbol(ident)))
+        let (typ, val) = match self.win.as_str() {
+            "def" => (TokenType::Keyword, TokenValue::Kwd(Keyword::Def)),
+            "extern" => (TokenType::Keyword, TokenValue::Kwd(Keyword::Extern)),
+            x => (TokenType::Identifier, TokenValue::Sym(x.into()))
+        };
+        self.emit(typ, val)
     }
 
     fn number(&mut self) -> Result<Token, Error> {
@@ -66,20 +83,20 @@ impl<'a> TokenizerImpl<'a> {
         // Parse the number
         let num: i64 = self.win.as_str().parse()?;
 
-        Ok(self.emit(TokenType::Number, TokenValue::Integer(num)))
+        self.emit(TokenType::Number, TokenValue::Int(num))
     }
 
-    fn emit(&mut self, typ: TokenType, value: TokenValue) -> Token {
+    fn emit(&mut self, typ: TokenType, value: TokenValue) -> Result<Token, Error> {
         let span = self.win.span();
         self.win.advance();
-        Token::new(span, typ, value)
+        Ok(Token::new(span, typ, value))
     }
 }
 
 
 #[cfg(test)]
 mod tests {
-    use tokenizer::{Token, Tokenizer, TokenType, TokenValue};
+    use tokenizer::{Token, Tokenizer, TokenType, TokenValue, Keyword};
 
     macro_rules! single_token_test {
         ($s: expr, $typ: expr, $val: expr) => {
@@ -103,10 +120,23 @@ mod tests {
     }
 
     token_tests! {
-        literal_zero => single_token_test!("0", TokenType::Number, TokenValue::Integer(0));
-        literal_pos_int => single_token_test!("123", TokenType::Number, TokenValue::Integer(123));
-        literal_neg_int => single_token_test!("-123", TokenType::Number, TokenValue::Integer(-123));
-        identifier => single_token_test!("_123foo_bar", TokenType::Identifier, TokenValue::Symbol("_123foo_bar".into()));
+        literal_zero => single_token_test!("0", TokenType::Number, TokenValue::Int(0));
+        literal_pos_int => single_token_test!("123", TokenType::Number, TokenValue::Int(123));
+        literal_neg_int => single_token_test!("-123", TokenType::Number, TokenValue::Int(-123));
+
+        identifier => single_token_test!("_123foo_bar", TokenType::Identifier, TokenValue::Sym("_123foo_bar".into()));
+
+        keyword_def => single_token_test!("def", TokenType::Keyword, TokenValue::Kwd(Keyword::Def));
+        keyword_extern => single_token_test!("extern", TokenType::Keyword, TokenValue::Kwd(Keyword::Extern));
+
+        lparen => single_token_test!("(", TokenType::LParen, TokenValue::None);
+        rparen => single_token_test!(")", TokenType::RParen, TokenValue::None);
+        comma => single_token_test!(",", TokenType::Comma, TokenValue::None);
+        plus => single_token_test!("+", TokenType::Plus, TokenValue::None);
+        minus => single_token_test!("-", TokenType::Minus, TokenValue::None);
+        star => single_token_test!("*", TokenType::Star, TokenValue::None);
+        slash => single_token_test!("/", TokenType::Slash, TokenValue::None);
+        assign => single_token_test!("=", TokenType::Assign, TokenValue::None);
     }
 
     fn get_single_token(s: &str) -> Token {

@@ -57,6 +57,15 @@ impl<'a> TextWindow<'a> {
     /// `true` if a character is successfully read in.
     /// `false` if end-of-file has been reached.
     pub fn take(&mut self) -> Result<bool, Error> {
+        self.take_if(..)
+    }
+
+    /// Takes the next character if it meets the predicate
+    ///
+    /// ## Returns
+    /// `true` if a character is successfully read in.
+    /// `false` if the predicate did not match OR end-of-file has been reached.
+    pub fn take_if<P: CharPredicate>(&mut self, predicate: P) -> Result<bool, Error> {
         if self.end >= self.buf.len() {
             self.last = None;
             Ok(false)
@@ -68,9 +77,14 @@ impl<'a> TextWindow<'a> {
             let new_end = self.end + width;
 
             if let Some((c, _)) = utils::decode_utf8_character(&self.buf.as_bytes()[self.end..new_end]) {
-                self.last = Some(c);
-                self.end = new_end;
-                Ok(true)
+                if predicate.test(c) {
+                    self.last = Some(c);
+                    self.end = new_end;
+                    Ok(true)
+                } else {
+                    // Predicate doesn't match
+                    Ok(false)
+                }
             } else {
                 Err(Error::InvalidText)
             }
@@ -116,8 +130,21 @@ impl<'a> TextWindow<'a> {
         self.last = None;
     }
 
+    /// Tests if the next character matches the provided predicate, without reading it into the buffer
+    pub fn peek<P: CharPredicate>(&self, predicate: P) -> bool {
+        if self.end >= self.buf.len() {
+            return false;
+        }
+
+        if let Some((c, _)) = utils::decode_utf8_character(&self.buf.as_bytes()[self.end..]) {
+            predicate.test(c)
+        } else {
+            false
+        }
+    }
+
     // Utilities for the tokenizer
-    pub fn last_is<P: CharPredicate>(&self, mut predicate: P) -> bool {
+    pub fn last_is<P: CharPredicate>(&self, predicate: P) -> bool {
         match self.last() {
             Some(c) => predicate.test(c),
             None => false,
@@ -128,9 +155,9 @@ impl<'a> TextWindow<'a> {
     /// 
     /// The window is expanded such that it contains all the matching characters
     /// but NO further characters.
-    pub fn scan_while<P: CharPredicate>(&mut self, mut predicate: P) -> Result<(), Error> {
+    pub fn scan_while<P: CharPredicate>(&mut self, predicate: P) -> Result<(), Error> {
         let mut marker = self.end();
-        while self.take()? && predicate.test(self.last().unwrap()) {
+        while self.take_if(|c| predicate.test(c))? {
             marker = self.end();
         }
         self.backtrack(marker);
@@ -144,57 +171,57 @@ impl<'a> TextWindow<'a> {
 }
 
 pub trait CharPredicate: Sized {
-    fn test(&mut self, c: char) -> bool;
+    fn test(&self, c: char) -> bool;
 
     fn invert(self) -> InvertedCharScanPredicate<Self> {
         InvertedCharScanPredicate(self)
     }
 }
 
-impl<F: FnMut(char) -> bool> CharPredicate for F {
-    fn test(&mut self, c: char) -> bool {
-        self.call_mut((c,))
+impl<F: Fn(char) -> bool> CharPredicate for F {
+    fn test(&self, c: char) -> bool {
+        self.call((c,))
     }
 }
 
 impl CharPredicate for Range<char> {
-    fn test(&mut self, c: char) -> bool {
+    fn test(&self, c: char) -> bool {
         self.contains(c)
     }
 }
 
 impl CharPredicate for RangeFull {
-    fn test(&mut self, _c: char) -> bool {
+    fn test(&self, _c: char) -> bool {
         true
     }
 }
 
 impl CharPredicate for RangeFrom<char> {
-    fn test(&mut self, c: char) -> bool {
+    fn test(&self, c: char) -> bool {
         self.contains(c)
     }
 }
 
 impl CharPredicate for RangeTo<char> {
-    fn test(&mut self, c: char) -> bool {
+    fn test(&self, c: char) -> bool {
         self.contains(c)
     }
 }
 
 impl CharPredicate for RangeToInclusive<char> {
-    fn test(&mut self, c: char) -> bool {
+    fn test(&self, c: char) -> bool {
         self.contains(c)
     }
 }
 
 impl CharPredicate for RangeInclusive<char> {
-    fn test(&mut self, c: char) -> bool {
+    fn test(&self, c: char) -> bool {
         self.contains(c)
     }
 }
 
 impl CharPredicate for char {
-    fn test(&mut self, c: char) -> bool {
+    fn test(&self, c: char) -> bool {
         c == *self
     }
 }
@@ -202,7 +229,7 @@ impl CharPredicate for char {
 pub struct InvertedCharScanPredicate<P: CharPredicate>(P);
 
 impl<P: CharPredicate> CharPredicate for InvertedCharScanPredicate<P> {
-    fn test(&mut self, c: char) -> bool {
+    fn test(&self, c: char) -> bool {
         !self.0.test(c)
     }
 }
@@ -217,12 +244,21 @@ mod tests {
             assert_eq!(Some($last), $win.last());
             assert_eq!($end, $win.end());
         };
+        ($win: expr, $content: expr, $end: expr) => {
+            assert_eq!($content, $win.as_str());
+            assert_eq!(None, $win.last());
+            assert_eq!($end, $win.end());
+        };
     }
 
     macro_rules! take_and_assert_window {
         ($win: expr, $content: expr, $last: expr, $end: expr) => {
             assert!($win.take().unwrap());
             assert_window!($win, $content, $last, $end)
+        };
+        ($win: expr, $content: expr, $end: expr) => {
+            assert!($win.take().unwrap());
+            assert_window!($win, $content, $end)
         };
     }
 
@@ -306,7 +342,26 @@ mod tests {
     }
 
     #[test]
-    pub fn scan_while_with_range_expands_window_to_all_characters_matching_predicate() {
+    pub fn peek_returns_false_at_eof() {
+        let mut window = TextWindow::new("0");
+        assert!(window.take().unwrap());
+        assert!(!window.peek(..));
+    }
+
+    #[test]
+    pub fn peek_returns_true_if_predicate_matches() {
+        let window = TextWindow::new("0");
+        assert!(window.peek('0'..='9'));
+    }
+
+    #[test]
+    pub fn peek_returns_false_if_predicate_does_not_match() {
+        let window = TextWindow::new("0");
+        assert!(!window.peek('1'..='9'));
+    }
+
+    #[test]
+    pub fn scan_while_expands_window_to_all_characters_matching_predicate() {
         let mut window = TextWindow::new("0123456789/abcdef");
 
         // Inclusive Range
@@ -347,6 +402,72 @@ mod tests {
         // Fn
         window.scan_while(|c: char| c.to_digit(10).unwrap() < 9).unwrap();
         assert_window!(window, "012345678", '8', 9);
+        window.reset();
+    }
+
+    #[test]
+    pub fn take_if_only_expands_window_if_next_char_matches_predicate() {
+        let mut window = TextWindow::new("0123456789/abcdef");
+
+        // Inclusive Range
+        window.take_if('0'..='9').unwrap();
+        assert_window!(window, "0", '0', 1);
+        window.reset();
+        window.take_if('a'..='z').unwrap();
+        assert_window!(window, "", 0);
+        window.reset();
+
+        // Exclusive Range
+        window.take_if('0'..'9').unwrap();
+        assert_window!(window, "0", '0', 1);
+        window.reset();
+        window.take_if('1'..'9').unwrap();
+        assert_window!(window, "", 0);
+        window.reset();
+
+        // Inclusive RangeTo
+        window.take_if(..='9').unwrap();
+        assert_window!(window, "0", '0', 1);
+        window.reset();
+        window.take_if(..='/').unwrap();
+        assert_window!(window, "", 0);
+        window.reset();
+
+        // Exclusive RangeTo
+        window.take_if(..'1').unwrap();
+        assert_window!(window, "0", '0', 1);
+        window.reset();
+        window.take_if(..'0').unwrap();
+        assert_window!(window, "", 0);
+        window.reset();
+
+        // RangeFrom ('/' is below '0')
+        window.take_if('0'..).unwrap();
+        assert_window!(window, "0", '0', 1);
+        window.reset();
+        window.take_if('1'..).unwrap();
+        assert_window!(window, "", 0);
+        window.reset();
+
+        // RangeFull
+        window.take_if(..).unwrap();
+        assert_window!(window, "0", '0', 1);
+        window.reset();
+
+        // char
+        window.take_if('0').unwrap();
+        assert_window!(window, "0", '0', 1);
+        window.reset();
+        window.take_if('1').unwrap();
+        assert_window!(window, "", 0);
+        window.reset();
+
+        // Fn
+        window.take_if(|c: char| c.to_digit(10).unwrap() < 9).unwrap();
+        assert_window!(window, "0", '0', 1);
+        window.reset();
+        window.take_if(|c: char| c.to_digit(10).unwrap() > 0).unwrap();
+        assert_window!(window, "", 0);
         window.reset();
     }
 }
