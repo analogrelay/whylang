@@ -6,17 +6,16 @@ Why is designed (right now) to be a scripty-style language but with native compi
 
 ## Structure
 
-A Why program consists of a sequence of statements and declarations. The final statement may be an expression that returns a value (this is like Rust's own function semantics).
+A Why program consists of a sequence of statements and declarations, concluding with a final expression. The value of the final expression is returned by writing it to stdout.
 
-### "Hello, World" Example
-
-```
-"Hello, World"
-```
-
-### A slightly more useful example
+## High-level Grammar
 
 ```
-let name = stdin.lines().next().unwrap();
-"Hello, {name}"
+Program := Statement* Expression
+
+Statement := [TBD] ';'
+
+Expression :=
+    '' |
+    [Number]
 ```

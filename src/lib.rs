@@ -7,5 +7,6 @@ mod macros;
 
 mod utils;
 
+pub mod parser;
 pub mod text;
 pub mod tokenizer;

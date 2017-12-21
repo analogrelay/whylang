@@ -1,5 +1,4 @@
 use std::char;
-use std::io::Read;
 
 use utils;
 
