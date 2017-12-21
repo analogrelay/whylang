@@ -1,9 +1,9 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Lit {
     Int(i64)
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum BinOp {
     Add,
     Subtract,
@@ -33,6 +33,13 @@ impl Expr {
 
     pub fn binary(l: Expr, r: Expr, op: BinOp) -> Expr {
         Expr::Binary(Box::new(l), Box::new(r), op)
+    }
+
+    pub fn precedence(&self) -> usize {
+        match self {
+            &Expr::Constant(_) => 0,
+            &Expr::Binary(_, _, op) => op.precedence()
+        }
     }
 }
 
