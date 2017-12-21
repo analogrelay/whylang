@@ -40,33 +40,47 @@ impl<'a> TokenizerImpl<'a> {
     }
 
     fn token(&mut self) -> Result<Token, Error> {
-        match self.last().expect("We know there should be a last because callers verify it") {
-            '0'...'9' => self.number(),
+        match self.last() {
+            '-' | '0'...'9' => self.number(),
             _ => Ok(self.emit(TokenType::Unknown, TokenValue::None))
         }
     }
 
     fn number(&mut self) -> Result<Token, Error> {
-        // Read until the end of the digits
         let mut number_end = self.mark();
+        let mut number_value: i64 = 0;
+
+        let multiplicator = if self.last() == '-' {
+            -1
+        } else {
+            // Not a '-' means this is the first digit.
+            number_value = self.last()
+                .to_digit(10)
+                .expect("The caller was supposed to validate that this was a digit!") as i64;
+
+            1
+        };
+
+        // Read until the end of the digits
         while self.take()? && self.matches('0'..='9') {
+            number_value *= 10;
+            number_value += multiplicator * self.last()
+                .to_digit(10)
+                .expect("The call to 'matches' was supposed to validate that this was a digit!") as i64;
             number_end = self.mark();
         }
         self.back(number_end);
 
-        Ok(self.emit(TokenType::Number, TokenValue::None))
+        Ok(self.emit(TokenType::Number, TokenValue::Integer(number_value)))
     }
 
     // Helpers
-    fn last(&self) -> Option<char> {
-        self.window.last()
+    fn last(&self) -> char {
+        self.window.last().expect("The 'last' helper should only be used when it is guaranteed that there is a character available.")
     }
 
     fn matches(&self, r: RangeInclusive<char>) -> bool {
-        match self.last() {
-            Some(c) => r.contains(c),
-            None => false
-        }
+        r.contains(self.last())
     }
 
     fn back(&mut self, marker: usize) {
@@ -92,20 +106,31 @@ impl<'a> TokenizerImpl<'a> {
 mod tests {
     use tokenizer::{Token, Tokenizer, TokenType, TokenValue};
 
-    // macro_rules! assert_token {
-    //     ($start_end: expr, $typ: expr, $val: expr, $tok: expr) => {
-    //        assert_eq!($start_end.0, $tok.span().start()); 
-    //        assert_eq!($start_end.1, $tok.span().start()); 
-    //     };
-    // }
+    macro_rules! single_token_test {
+        ($s: expr, $typ: expr, $val: expr) => {
+            let tok = get_single_token($s);
+            assert_eq!(0, tok.span().start());
+            assert_eq!($s.len(), tok.span().end());
+            assert_eq!($typ, tok.typ());
+            assert_eq!(&$val, tok.value());
+        };
+    }
 
-    #[test]
-    pub fn number_integer() {
-        let tok = get_single_token("123");
-        assert_eq!(0, tok.span().start());
-        assert_eq!(3, tok.span().end());
-        assert_eq!(TokenType::Number, tok.typ());
-        assert_eq!(&TokenValue::Integer(123), tok.value());
+    macro_rules! token_tests {
+        ($($name: ident => $test: stmt;)*) => {
+            $(
+                #[test]
+                pub fn $name() {
+                    $test
+                }
+            )*
+        };
+    }
+
+    token_tests! {
+        literal_zero => single_token_test!("0", TokenType::Number, TokenValue::Integer(0));
+        literal_pos_int => single_token_test!("123", TokenType::Number, TokenValue::Integer(123));
+        literal_neg_int => single_token_test!("-123", TokenType::Number, TokenValue::Integer(-123));
     }
 
     fn get_single_token(s: &str) -> Token {
