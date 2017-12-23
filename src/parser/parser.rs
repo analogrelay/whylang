@@ -1,12 +1,12 @@
-use tokenizer::{Token, TokenType, TokenValue};
-use parser::{Expr, BinOp};
+use tokenizer::{self, Token, TokenType, TokenValue};
+use parser::{Expr, BinOp, Error};
 
-pub struct Parser<I: Iterator<Item=Token>> {
+pub struct Parser<I: Iterator<Item=Result<Token, tokenizer::Error>>> {
     tokens: I,
-    current: Option<Token>
+    current: Option<Result<Token, tokenizer::Error>>
 }
 
-impl<I: Iterator<Item=Token>> Parser<I> {
+impl<I: Iterator<Item=Result<Token, tokenizer::Error>>> Parser<I> {
     pub fn new(mut tokens: I) -> Parser<I> {
         let first = tokens.next();
         Parser {
@@ -15,20 +15,16 @@ impl<I: Iterator<Item=Token>> Parser<I> {
         }
     }
 
-    pub fn expr(&mut self) -> Option<Expr> {
-        // Parse the left side
-        if let Some(primary) = self.primary_expr() {
-            self.expr_rhs(primary, 0)
-        } else {
-            None
-        }
+    pub fn expr(&mut self) -> Result<Expr, Error> {
+        let primary = self.primary_expr()?;
+        self.expr_rhs(primary, 0)
     }
 
-    fn expr_rhs(&mut self, mut lhs: Expr, precedence: usize) -> Option<Expr> {
+    fn expr_rhs(&mut self, mut lhs: Expr, precedence: usize) -> Result<Expr, Error> {
         while let Some(binop) = self.peek_binop() {
             if binop.precedence() < precedence {
                 // We've finished, and lhs is the finished expression
-                return Some(lhs);
+                return Ok(lhs);
             }
 
             // Consume the binop
@@ -40,42 +36,49 @@ impl<I: Iterator<Item=Token>> Parser<I> {
                 // There's another binary operator, does it bind more strongly?
                 if next_binop.precedence() > binop.precedence() {
                     // It does. Parse the right-side of this operator
-                    rhs = self.expr_rhs(rhs, binop.precedence() + 1)
-                        .expect("TODO: Error handling for trailing binary operator")
+                    rhs = self.expr_rhs(rhs, binop.precedence() + 1)?
                 }
             }
 
             // Merge lhs/rhs
             lhs = Expr::binary(lhs, rhs, binop);
         }
-        Some(lhs)
+        Ok(lhs)
     }
 
     fn peek_binop(&mut self) -> Option<BinOp> {
-        match self.cur()?.typ() {
-            TokenType::Plus => Some(BinOp::Add),
-            _ => None
+        if let Ok(t) = self.cur() {
+            match t.typ() {
+                TokenType::Plus => Some(BinOp::Add),
+                _ => None,
+            }
+        } else {
+            None
         }
     }
 
-    fn primary_expr(&mut self) -> Option<Expr> {
+    fn primary_expr(&mut self) -> Result<Expr, Error> {
         match self.cur()?.typ() {
             TokenType::Number => self.literal(),
-            _ => None
+            _ => panic!("TODO: Implement other primary_exprs"),
         }
     }
 
-    fn literal(&mut self) -> Option<Expr> {
+    fn literal(&mut self) -> Result<Expr, Error> {
         let result = match self.cur()?.value() {
-            &TokenValue::Int(i) => Some(Expr::constant(i)),
-            _ => None
+            &TokenValue::Int(i) => Ok(Expr::constant(i)),
+            _ => panic!("TODO: Implement other literals"),
         };
         self.next();
         result
     }
 
-    fn cur(&self) -> Option<&Token> {
-        self.current.as_ref()
+    fn cur(&self) -> Result<&Token, Error> {
+        match self.current {
+            Some(Ok(ref t)) => Ok(t),
+            Some(Err(ref e)) => Err(e.clone().into()),
+            None => Err(Error::UnexpectedEndOfFile),
+        }
     }
 
     fn next(&mut self) {
@@ -85,49 +88,30 @@ impl<I: Iterator<Item=Token>> Parser<I> {
 
 #[cfg(test)]
 mod tests {
-    use tokenizer::{Token, TokenType, TokenValue};
+    use tokenizer::{Token, TokenType, TokenValue, Tokenizer};
     use parser::{Parser, Expr, BinOp};
     use text::TextSpan;
 
     macro_rules! expr_tests {
         ($(
-            $name: ident: [ $(
-                ($typ: expr, $val: expr)
-            ),* ] => $result: expr;
+            $name: ident: $text: expr => $result: expr;
          )*) => {
            $(
                #[test]
                pub fn $name() {
-                   let tokens = [
-                       $(
-                           Token::new(TextSpan::new(0, 0), $typ, $val)
-                       ),*
-                   ];
-                   let mut parser = Parser::new(tokens.iter().cloned());
-                   let expr = parser.expr();
-                   assert!(expr.is_some());
-                   assert_eq!($result, expr.unwrap());
+                   let tokens = Tokenizer::new($text);
+                   let mut parser = Parser::new(tokens);
+                   let expr = parser.expr().expect("Expected the parse the succeed");
+                   assert_eq!($result, expr);
                }
            )*
         };
     }
 
     expr_tests! {
-        expr_int_literal: [ (TokenType::Number, TokenValue::Int(42)) ] => Expr::constant(42);
-        bin_add_literals: [ 
-            (TokenType::Number, TokenValue::Int(40)),
-            (TokenType::Plus, TokenValue::None),
-            (TokenType::Number, TokenValue::Int(2))
-        ] => Expr::binary(Expr::constant(40), Expr::constant(2), BinOp::Add);
-        bin_add_literal_sequence: [ 
-            (TokenType::Number, TokenValue::Int(1)),
-            (TokenType::Plus, TokenValue::None),
-            (TokenType::Number, TokenValue::Int(2)),
-            (TokenType::Plus, TokenValue::None),
-            (TokenType::Number, TokenValue::Int(3)),
-            (TokenType::Plus, TokenValue::None),
-            (TokenType::Number, TokenValue::Int(4))
-        ] => 
+        expr_int_literal: "42" => Expr::constant(42);
+        bin_add_literals: "40 + 2" => Expr::binary(Expr::constant(40), Expr::constant(2), BinOp::Add);
+        bin_add_literal_sequence: "1 + 2 + 3 + 4" =>
             Expr::binary(
                 Expr::binary(
                     Expr::binary(

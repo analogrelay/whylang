@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
 use lazy_init::Lazy;
@@ -27,7 +27,7 @@ impl Document {
     }
 
     /// Reads all the text from the specified reader into a new `Document`
-    pub fn read<P: Into<PathBuf>, R: Read>(path: P, reader: &mut R) -> Result<Document, Error> {
+    pub fn read<P: Into<PathBuf>, R: Read>(path: P, reader: &mut R) -> Result<Document, io::Error> {
         let mut text = String::new();
         reader.read_to_string(&mut text)?;
         Ok(Document::new(path, text))

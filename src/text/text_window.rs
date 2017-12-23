@@ -109,16 +109,22 @@ impl<'a> TextWindow<'a> {
             "The requested index does not represent a character boundary.");
         self.end = new_end;
 
-        // Scan back to the previous char boundary
-        let mut pos = self.end - 1;
-        while !self.buf.is_char_boundary(pos) {
-            pos -= 1;
-        }
+        self.last = if self.end > 0 {
+            // Update last
 
-        // Update last to that character
-        let (c, _) = utils::decode_utf8_character(&self.buf.as_bytes()[pos..self.end])
-            .expect("The previous character should have been a valid UTF-8 character.");
-        self.last = Some(c);
+            // Scan back to the previous char boundary
+            let mut pos = self.end - 1;
+            while !self.buf.is_char_boundary(pos) {
+                pos -= 1;
+            }
+
+            // Update last to that character
+            let (c, _) = utils::decode_utf8_character(&self.buf.as_bytes()[pos..self.end])
+                .expect("The previous character should have been a valid UTF-8 character.");
+            Some(c)
+        } else {
+            None
+        }
     }
 
     /// Advances the window to the point currently pointed to by `end`

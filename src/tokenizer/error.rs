@@ -2,7 +2,7 @@ use std::num::ParseIntError;
 
 use text;
 
-#[derive(Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Error {
     TextError(text::Error),
     ParseIntError(ParseIntError)

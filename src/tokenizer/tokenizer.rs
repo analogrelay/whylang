@@ -9,6 +9,12 @@ impl<'a> Iterator for Tokenizer<'a> {
     type Item = Result<Token, Error>;
 
     fn next(&mut self) -> Option<Result<Token, Error>> {
+        // Skip whitespace
+        if let Err(e) = self.imp.win.scan_while(|c: char| c.is_whitespace()) {
+            return Some(Err(e.into()));
+        }
+        self.imp.win.advance();
+
         // Read the first character
         match self.imp.win.take() {
             Ok(true) => Some(self.imp.token()),
@@ -100,9 +106,14 @@ mod tests {
 
     macro_rules! single_token_test {
         ($s: expr, $typ: expr, $val: expr) => {
-            let tok = get_single_token($s);
-            assert_eq!(0, tok.span().start());
-            assert_eq!($s.len(), tok.span().end());
+            // Test whitespace skipping
+            let mut s = String::new();
+            s.push_str(" \t");
+            s.push_str($s);
+            s.push_str("\t ");
+            let tok = get_single_token(&s);
+            assert_eq!(2, tok.span().start());
+            assert_eq!($s.len() + 2, tok.span().end());
             assert_eq!($typ, tok.typ());
             assert_eq!(&$val, tok.value());
         };
