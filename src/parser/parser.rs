@@ -50,6 +50,9 @@ impl<I: Iterator<Item=Result<Token, tokenizer::Error>>> Parser<I> {
         if let Ok(t) = self.cur() {
             match t.typ() {
                 TokenType::Plus => Some(BinOp::Add),
+                TokenType::Minus => Some(BinOp::Subtract),
+                TokenType::Star => Some(BinOp::Multiply),
+                TokenType::Slash => Some(BinOp::Divide),
                 _ => None,
             }
         } else {
@@ -119,6 +122,17 @@ mod tests {
                         Expr::constant(2),
                         BinOp::Add),
                     Expr::constant(3),
+                    BinOp::Add),
+                Expr::constant(4),
+                BinOp::Add);
+        bin_add_mult_precedence: "1 + 2 * 3 + 4" =>
+            Expr::binary(
+                Expr::binary(
+                    Expr::constant(1),
+                    Expr::binary( // 2*3 are associated, because the precedence of * is higher 
+                        Expr::constant(2),
+                        Expr::constant(3),
+                        BinOp::Multiply),
                     BinOp::Add),
                 Expr::constant(4),
                 BinOp::Add);
