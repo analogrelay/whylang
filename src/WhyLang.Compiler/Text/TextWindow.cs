@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 
 namespace WhyLang.Compiler
 {
@@ -10,6 +11,13 @@ namespace WhyLang.Compiler
 
         public ReadOnlySpan<char> Content => _buffer.AsSpan().Slice(_start, _length);
         public TextSpan Span => new TextSpan(_start, _length);
+
+        public TextWindow(string buffer)
+        {
+            _buffer = buffer;
+            _start = 0;
+            _length = 0;
+        }
 
         /// <summary>
         /// Accepts a new character into the window, returning a boolean indicating if there
