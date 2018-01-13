@@ -37,7 +37,9 @@ namespace WhyLang.Compiler.Tests
             Assert.False(window.Take());
         }
 
-        public void AdvanceMovesWindowUpToEnd() {
+        [Fact]
+        public void AdvanceMovesWindowUpToEnd()
+        {
             var window = new TextWindow("This is a test");
             Assert.True(window.Take());
             Assert.True(window.Take());
