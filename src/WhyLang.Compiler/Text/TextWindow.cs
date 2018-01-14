@@ -9,6 +9,8 @@ namespace WhyLang.Compiler
         private int _start;
         private int _length;
 
+        private int End => _start + _length;
+
         public ReadOnlySpan<char> Content => _buffer.AsSpan().Slice(_start, _length);
         public TextSpan Span => new TextSpan(_start, _length);
         public char Last => Content.Length > 0 ? Content[Content.Length - 1] : '\0';
@@ -29,6 +31,17 @@ namespace WhyLang.Compiler
             _start += _length;
             _length = 0;
         }
+
+        /// <summary>
+        /// Returns the next character that would be read by <see cref="Take" /> or a null character ('\0')
+        /// if there are no further characters.
+        /// </summary>
+        public char Peek() => End < _buffer.Length ? _buffer[End] : '\0';
+
+        /// <summary>
+        /// Returns true if the next character matches the provided predicate
+        /// </summary>
+        public bool Peek(Func<char, bool> predicate) => predicate(Peek());
 
         /// <summary>
         /// Creates a new string containing the characters currently in the window
@@ -52,14 +65,9 @@ namespace WhyLang.Compiler
         /// </summary>
         public bool TakeIf(Func<char, bool> predicate)
         {
-            var newLength = _length + 1;
-            if (newLength + _start > _buffer.Length)
+            if (Peek(c => c != '\0' && predicate(c)))
             {
-                return false;
-            }
-            else if (predicate(_buffer[_start + _length]))
-            {
-                _length = newLength;
+                _length += 1;
                 return true;
             }
             return false;
@@ -88,7 +96,7 @@ namespace WhyLang.Compiler
             {
                 throw new InvalidOperationException("Cannot use SkipWhile when the window has text in it");
             }
-            
+
             TakeWhile(predicate);
             Advance();
         }

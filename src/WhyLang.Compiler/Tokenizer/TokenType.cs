@@ -6,5 +6,15 @@ namespace WhyLang.Compiler.Tokenizer
         EndOfFile,
         Integer,
         Identifier,
+        Def,
+        Extern,
+        LParen,
+        RParen,
+        Comma,
+        Plus,
+        Minus,
+        Star,
+        Slash,
+        Assign,
     }
 }

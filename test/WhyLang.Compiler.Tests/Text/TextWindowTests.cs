@@ -87,5 +87,37 @@ namespace WhyLang.Compiler.Text.Tests
             Assert.Equal("123456789", window.GetString());
             Assert.Equal(new TextSpan(1, 9), window.Span);
         }
+
+        [Fact]
+        public void PeekReturnsNextCharacter()
+        {
+            var window = new TextWindow("0123456789abcedefg");
+            window.Take();
+            Assert.Equal('1', window.Peek());
+        }
+
+        [Fact]
+        public void PeekReturnsNullAtEndOfWindow()
+        {
+            var window = new TextWindow("0");
+            window.Take();
+            Assert.Equal('\0', window.Peek());
+        }
+
+        [Fact]
+        public void PeekReturnsTrueIfPredicateMatches()
+        {
+            var window = new TextWindow("01");
+            window.Take();
+            Assert.True(window.Peek(c => c == '1'));
+        }
+
+        [Fact]
+        public void PeekReturnsFalseIfPredicateDoesNotMatch()
+        {
+            var window = new TextWindow("01");
+            window.Take();
+            Assert.False(window.Peek(c => c != '1'));
+        }
     }
 }

@@ -5,6 +5,9 @@ namespace WhyLang.Compiler.Tokenizer.Tests
 {
     public partial class TokenizerTests
     {
+        public static void SingleTokenTest(string input, TokenType expectedType) =>
+            SingleTokenTest(input, expectedType, TokenValue.Null);
+
         public static void SingleTokenTest(string input, TokenType expectedType, TokenValue expectedValue)
         {
             var tokens = Tokenizer.Tokenize(" \t\r\n" + input + "\n\t ");

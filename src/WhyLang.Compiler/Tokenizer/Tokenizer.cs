@@ -7,6 +7,12 @@ namespace WhyLang.Compiler.Tokenizer
     {
         private readonly TextWindow _window;
 
+        private static readonly Dictionary<string, TokenType> _keywords = new Dictionary<string, TokenType>()
+        {
+            {"def", TokenType.Def},
+            {"extern", TokenType.Extern}
+        };
+
         public Tokenizer(string input) : this(new TextWindow(input))
         {
         }
@@ -39,12 +45,19 @@ namespace WhyLang.Compiler.Tokenizer
             switch (_window.Last)
             {
                 // Hrm, wish we didn't need the type pattern here :(
-                case '-':
+                case '-' when _window.Peek(x => char.IsDigit(x)):
                 case char c when char.IsDigit(c):
                     return Number();
                 case '_':
                 case char c when char.IsLetter(c):
                     return Identifier();
+                case '(': return Emit(TokenType.LParen);
+                case ')': return Emit(TokenType.RParen);
+                case ',': return Emit(TokenType.Comma);
+                case '+': return Emit(TokenType.Plus);
+                case '*': return Emit(TokenType.Star);
+                case '/': return Emit(TokenType.Slash);
+                case '=': return Emit(TokenType.Assign);
                 default:
                     return Emit(TokenType.Unknown);
             }
@@ -53,9 +66,19 @@ namespace WhyLang.Compiler.Tokenizer
         private Token Identifier()
         {
             _window.TakeWhile(c => char.IsLetterOrDigit(c) || c == '_');
-            return Emit(
-                type: TokenType.Identifier,
-                value: TokenValue.Identifier(_window.GetString()));
+            var ident = _window.GetString();
+
+            // Check if it's a keyword
+            if (_keywords.TryGetValue(ident, out var type))
+            {
+                return Emit(type, TokenValue.Null);
+            }
+            else
+            {
+                return Emit(
+                    type: TokenType.Identifier,
+                    value: TokenValue.Identifier(ident));
+            }
         }
 
         private Token Number()
