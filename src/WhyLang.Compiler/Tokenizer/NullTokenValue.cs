@@ -16,5 +16,7 @@ namespace WhyLang.Compiler.Tokenizer
 
         // We're required to implement this when we implement Equals
         public override int GetHashCode() => 0;
+
+        public override string ToString() => string.Empty;
     }
 }

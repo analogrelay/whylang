@@ -4,5 +4,7 @@ namespace WhyLang.Compiler.Tokenizer
     {
         Unknown,
         EndOfFile,
+        Integer,
+        Identifier,
     }
 }

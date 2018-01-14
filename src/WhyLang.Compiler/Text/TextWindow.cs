@@ -26,7 +26,7 @@ namespace WhyLang.Compiler
         public void Advance()
         {
             // Nothing to check here. If there aren't any more characters, Take will return false.
-            _start = _start + _length;
+            _start += _length;
             _length = 0;
         }
 
@@ -38,18 +38,26 @@ namespace WhyLang.Compiler
         /// </remarks>
         public string GetString()
         {
-            // There may be a way to have fewer copies, but this is already
-            // an allocatey, cold-path method :)
             return new string(Content.ToArray());
         }
 
-        public bool TakeIf(Func<char, bool> predicate) {
+        /// <summary>
+        /// Accepts a new character into the window, returning a boolean indicating if there
+        /// was another character to accept
+        /// <summary>
+        public bool Take() => TakeIf(_ => true);
+
+        /// <summary>
+        /// Accepts a new character into the window, but only if it matches the provided predicate
+        /// </summary>
+        public bool TakeIf(Func<char, bool> predicate)
+        {
             var newLength = _length + 1;
             if (newLength + _start > _buffer.Length)
             {
                 return false;
             }
-            else if(predicate(_buffer[_length]))
+            else if (predicate(_buffer[_start + _length]))
             {
                 _length = newLength;
                 return true;
@@ -58,9 +66,31 @@ namespace WhyLang.Compiler
         }
 
         /// <summary>
-        /// Accepts a new character into the window, returning a boolean indicating if there
-        /// was another character to accept
+        /// Accepts characters as long as they are matching the provided predicate.
+        /// </summary>
+        public void TakeWhile(Func<char, bool> predicate)
+        {
+            while (TakeIf(predicate))
+            {
+                // Nothing to do in the body :)
+            }
+        }
+
         /// <summary>
-        public bool Take() => TakeIf(_ => true);
+        /// Skips characters as long as they match the provided predicate
+        /// </summary>
+        /// <remarks>
+        /// This can only be called when the window is empty
+        /// </remarks>
+        public void SkipWhile(Func<char, bool> predicate)
+        {
+            if (_length != 0)
+            {
+                throw new InvalidOperationException("Cannot use SkipWhile when the window has text in it");
+            }
+            
+            TakeWhile(predicate);
+            Advance();
+        }
     }
 }

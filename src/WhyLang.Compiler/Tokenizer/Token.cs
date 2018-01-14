@@ -33,5 +33,7 @@ namespace WhyLang.Compiler.Tokenizer
             hash.Add(Value);
             return hash;
         }
+
+        public override string ToString() => $"({Location}):{Type}[{Value}]";
     }
 }
