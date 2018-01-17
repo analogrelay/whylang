@@ -1,7 +1,7 @@
 using System;
 using Microsoft.Extensions.Internal;
 
-namespace WhyLang.Compiler.Tokenizer
+namespace WhyLang.Compiler.Tokens
 {
     public struct Token : IEquatable<Token>
     {

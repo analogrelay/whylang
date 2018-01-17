@@ -1,6 +1,6 @@
 using System;
 
-namespace WhyLang.Compiler.Tokenizer
+namespace WhyLang.Compiler.Tokens
 {
     public abstract class TokenValue : IEquatable<TokenValue>
     {

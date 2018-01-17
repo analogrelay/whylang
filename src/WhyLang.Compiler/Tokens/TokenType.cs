@@ -1,4 +1,4 @@
-namespace WhyLang.Compiler.Tokenizer
+namespace WhyLang.Compiler.Tokens
 {
     public enum TokenType
     {

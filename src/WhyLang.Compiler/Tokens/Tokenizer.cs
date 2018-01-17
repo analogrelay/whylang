@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace WhyLang.Compiler.Tokenizer
+namespace WhyLang.Compiler.Tokens
 {
     public class Tokenizer
     {

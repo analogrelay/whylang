@@ -1,7 +1,7 @@
 using System.Linq;
 using Xunit;
 
-namespace WhyLang.Compiler.Tokenizer.Tests
+namespace WhyLang.Compiler.Tokens.Tests
 {
     public partial class TokenizerTests
     {

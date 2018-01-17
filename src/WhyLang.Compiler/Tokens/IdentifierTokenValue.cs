@@ -1,24 +1,24 @@
-namespace WhyLang.Compiler.Tokenizer
+namespace WhyLang.Compiler.Tokens
 {
-    public class IntegerTokenValue : TokenValue
+    public class IdentifierTokenValue : TokenValue
     {
-        public long Value { get; }
+        public string Value { get; }
 
-        public IntegerTokenValue(long value)
+        public IdentifierTokenValue(string value)
         {
             Value = value;
         }
-
 
         public override bool Equals(object obj) =>
             obj is TokenValue v && Equals(v);
 
         public override bool Equals(TokenValue other) =>
-            other is IntegerTokenValue iv && iv.Value == Value;
+            other is IdentifierTokenValue iv && 
+            string.Equals(iv.Value, Value, Constants.IdentifierComparison);
 
         // We're required to implement this when we implement Equals
         public override int GetHashCode() => Value.GetHashCode();
 
-        public override string ToString() => Value.ToString();
+        public override string ToString() => Value;
     }
 }
