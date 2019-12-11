@@ -23,10 +23,17 @@ namespace WhyLang.Compiler.Syntax
                 case TokenType.Integer:
                 case TokenType.String:
                     return ConstantExpression();
+                case TokenType.Identifier:
+                    return CallExpression();
                 default:
                     _tokens.Next();
                     throw new SyntaxException(_tokens.Current.Location, $"Unexpected {_tokens.Current.Type}.");
             }
+        }
+
+        private ExpressionSyntax CallExpression()
+        {
+            throw new NotImplementedException();
         }
 
         private ConstantExpressionSyntax ConstantExpression()
