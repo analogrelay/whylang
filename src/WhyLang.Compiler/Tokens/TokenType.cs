@@ -14,6 +14,7 @@ namespace WhyLang.Compiler.Tokens
         Plus,
         Minus,
         Star,
+        String,
         Slash,
         Assign,
     }

@@ -21,23 +21,22 @@ namespace WhyLang.Compiler.Syntax
             switch (_tokens.Current.Type)
             {
                 case TokenType.Integer:
+                case TokenType.String:
                     return ConstantExpression();
                 default:
                     _tokens.Next();
-                    throw new Exception($"Unexpected {_tokens.Current.Type}! TODO: Error recovery!");
+                    throw new SyntaxException(_tokens.Current.Location, $"Unexpected {_tokens.Current.Type}.");
             }
         }
 
         private ConstantExpressionSyntax ConstantExpression()
         {
-            if (_tokens.Current.Value is IntegerTokenValue i)
+            return _tokens.Current.Value switch
             {
-                return new ConstantExpressionSyntax(i.Value);
-            }
-            else
-            {
-                throw new Exception("Unexpected non-numeric constant! TODO: Error recovery!");
-            }
+                IntegerTokenValue i => new ConstantExpressionSyntax(i.Value),
+                StringTokenValue s => new ConstantExpressionSyntax(s.Value),
+                _ => throw new SyntaxException(_tokens.Current.Location, "Unexpected constant type."),
+            };
         }
     }
 }

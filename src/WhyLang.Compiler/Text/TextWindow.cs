@@ -3,6 +3,7 @@ using System.Diagnostics;
 
 namespace WhyLang.Compiler
 {
+    [DebuggerDisplay("{DebuggerDisplay,nq}")]
     public class TextWindow
     {
         private string _buffer;
@@ -14,6 +15,27 @@ namespace WhyLang.Compiler
         public ReadOnlySpan<char> Content => _buffer.AsSpan().Slice(_start, _length);
         public TextSpan Span => new TextSpan(_start, _length);
         public char Last => Content.Length > 0 ? Content[Content.Length - 1] : '\0';
+
+        private string DebuggerDisplay
+        {
+            get
+            {
+                var prefixLen = Math.Min(3, _start);
+                var prefix = prefixLen > 0 ? _buffer.Substring(_start - prefixLen, prefixLen) : string.Empty;
+                if(_start > 3)
+                {
+                    prefix = $"…{prefix}";
+                }
+                var content = GetString();
+                var suffixLen = Math.Min(3, _buffer.Length - _start - _length);
+                var suffix = suffixLen > 0 ? _buffer.Substring(_start + _length, suffixLen) : string.Empty;
+                if(_buffer.Length - _start - _length > 3)
+                {
+                    suffix = $"{suffix}…";
+                }
+                return $"«{prefix}¦{content}¦{suffix}» ({Span})";
+            }
+        }
 
         public TextWindow(string buffer)
         {
@@ -49,16 +71,18 @@ namespace WhyLang.Compiler
         /// <remarks>
         /// This allocates a new string EACH time it is called
         /// </remarks>
-        public string GetString()
-        {
-            return new string(Content.ToArray());
-        }
+        public string GetString() => new string(Content);
 
         /// <summary>
         /// Accepts a new character into the window, returning a boolean indicating if there
         /// was another character to accept
         /// <summary>
         public bool Take() => TakeIf(_ => true);
+
+        /// <summary>
+        /// Accepts a new character into the window, but only if it matches the provided character
+        /// </summary>
+        public bool TakeIf(char expected) => TakeIf(c => c == expected);
 
         /// <summary>
         /// Accepts a new character into the window, but only if it matches the provided predicate
@@ -74,7 +98,22 @@ namespace WhyLang.Compiler
         }
 
         /// <summary>
-        /// Accepts characters as long as they are matching the provided predicate.
+        /// Accepts characters until the end of file, or when the provided characeter is reached.
+        /// </summary>
+        public void TakeUntil(char chr) => TakeUntil(c => c == chr);
+
+        /// <summary>
+        /// Accepts characters until one matches the provided predicate
+        /// </summary>
+        public void TakeUntil(Func<char, bool> predicate) => TakeWhile(c => !predicate(c));
+
+        /// <summary>
+        /// Accepts a sequence of the provided character
+        /// </summary>
+        public void TakeWhile(char chr) => TakeWhile(c => c == chr);
+
+        /// <summary>
+        /// Accepts characters as long as they match the provided predicate.
         /// </summary>
         public void TakeWhile(Func<char, bool> predicate)
         {
@@ -99,6 +138,12 @@ namespace WhyLang.Compiler
 
             TakeWhile(predicate);
             Advance();
+        }
+
+        private void FillBuffer(Span<char> destination)
+        {
+            Debug.Assert(destination.Length == _length);
+            _buffer.AsSpan().Slice(_start, _length).CopyTo(destination);
         }
     }
 }

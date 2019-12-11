@@ -1,3 +1,5 @@
+using System;
+using System.Reflection;
 using Xunit;
 
 namespace WhyLang.Compiler.Text.Tests
@@ -118,6 +120,37 @@ namespace WhyLang.Compiler.Text.Tests
             var window = new TextWindow("01");
             window.Take();
             Assert.False(window.Peek(c => c != '1'));
+        }
+
+        private static readonly PropertyInfo _debuggerDisplayProp =
+            typeof(TextWindow).GetProperty("DebuggerDisplay", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        [Fact]
+        public void DebuggerDisplayWorks()
+        {
+            var window = new TextWindow("01234567");
+            Func<string> getDebuggerDisplay = () => (string)_debuggerDisplayProp.GetValue(window);
+            Assert.Equal("«¦¦012…» (0..0)", getDebuggerDisplay());
+            window.Take();
+            Assert.Equal("«¦0¦123…» (0..1)", getDebuggerDisplay());
+            window.Advance();
+            Assert.Equal("«0¦¦123…» (1..1)", getDebuggerDisplay());
+            window.Take();
+            window.Take();
+            window.Take();
+            Assert.Equal("«0¦123¦456…» (1..4)", getDebuggerDisplay());
+            window.Advance();
+            Assert.Equal("«…123¦¦456…» (4..4)", getDebuggerDisplay());
+            window.Take();
+            window.Take();
+            window.Take();
+            Assert.Equal("«…123¦456¦7» (4..7)", getDebuggerDisplay());
+            window.Advance();
+            Assert.Equal("«…456¦¦7» (7..7)", getDebuggerDisplay());
+            window.Take();
+            Assert.Equal("«…456¦7¦» (7..8)", getDebuggerDisplay());
+            window.Advance();
+            Assert.Equal("«…567¦¦» (8..8)", getDebuggerDisplay());
         }
     }
 }

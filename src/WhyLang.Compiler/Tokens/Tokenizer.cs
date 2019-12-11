@@ -47,10 +47,12 @@ namespace WhyLang.Compiler.Tokens
                 // Hrm, wish we didn't need the type pattern here :(
                 case '-' when _window.Peek(x => char.IsDigit(x)):
                 case char c when char.IsDigit(c):
-                    return Number();
+                    return ParseNumber();
+                case '"':
+                    return ParseString();
                 case '_':
                 case char c when char.IsLetter(c):
-                    return Identifier();
+                    return ParseIdentifier();
                 case '(': return Emit(TokenType.LParen);
                 case ')': return Emit(TokenType.RParen);
                 case ',': return Emit(TokenType.Comma);
@@ -63,7 +65,7 @@ namespace WhyLang.Compiler.Tokens
             }
         }
 
-        private Token Identifier()
+        private Token ParseIdentifier()
         {
             _window.TakeWhile(c => char.IsLetterOrDigit(c) || c == '_');
             var ident = _window.GetString();
@@ -81,13 +83,44 @@ namespace WhyLang.Compiler.Tokens
             }
         }
 
-        private Token Number()
+        private Token ParseNumber()
         {
             _window.TakeWhile(c => char.IsDigit(c));
             return Emit(
                 type: TokenType.Integer,
                 // Can't use Span<char>-native Int32.Parse in netstandard2.0 :(
-                value: TokenValue.Integer(Int32.Parse(_window.GetString())));
+                value: TokenValue.Integer(int.Parse(_window.Content)));
+        }
+
+        private Token ParseString()
+        {
+            // Read until the next '"'
+            _window.TakeUntil(c => c == '"' || c == '\r' || c == '\n');
+
+            if(_window.Peek(c => c == '\r' || c == '\n'))
+            {
+                throw new SyntaxException(
+                    _window.Span,
+                    "Unexpected new line");
+            }
+
+            // Verify we're at the end of the string
+            if (!_window.TakeIf('"'))
+            {
+                throw new SyntaxException(
+                    _window.Span,
+                    "Unexpected end-of-file");
+            }
+
+            // Remove `"` from the content
+            var content = _window.Content.Slice(1, _window.Content.Length - 2);
+            var token = Emit(
+                type: TokenType.String,
+                value: TokenValue.String(new string(content)));
+
+            _window.Advance();
+
+            return token;
         }
 
         private Token Emit(TokenType type) => Emit(type, TokenValue.Null);

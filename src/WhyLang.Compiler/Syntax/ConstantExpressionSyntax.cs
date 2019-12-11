@@ -2,9 +2,9 @@ namespace WhyLang.Compiler.Syntax
 {
     public class ConstantExpressionSyntax : ExpressionSyntax
     {
-        public long Value { get; }
+        public object Value { get; }
 
-        public ConstantExpressionSyntax(long value)
+        public ConstantExpressionSyntax(object value)
         {
             Value = value;
         }
@@ -12,7 +12,7 @@ namespace WhyLang.Compiler.Syntax
         public override bool Equals(SyntaxNode other)
         {
             return other is ConstantExpressionSyntax s &&
-                s.Value == Value;
+                Equals(s.Value, Value);
         }
 
         public override int GetHashCode() => Value.GetHashCode();
