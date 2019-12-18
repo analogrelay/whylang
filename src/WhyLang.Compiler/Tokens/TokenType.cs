@@ -2,7 +2,8 @@ namespace WhyLang.Compiler.Tokens
 {
     public enum TokenType
     {
-        Unknown,
+        Empty = 0,
+        Unknown = 1,
         EndOfFile,
         Integer,
         Identifier,

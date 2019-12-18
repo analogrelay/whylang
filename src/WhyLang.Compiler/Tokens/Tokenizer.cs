@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace WhyLang.Compiler.Tokens
 {
-    public class Tokenizer
+    public class Tokenizer : ITokenizer
     {
         private readonly TextWindow _window;
 
@@ -97,7 +97,7 @@ namespace WhyLang.Compiler.Tokens
             // Read until the next '"'
             _window.TakeUntil(c => c == '"' || c == '\r' || c == '\n');
 
-            if(_window.Peek(c => c == '\r' || c == '\n'))
+            if (_window.Peek(c => c == '\r' || c == '\n'))
             {
                 throw new SyntaxException(
                     _window.Span,
